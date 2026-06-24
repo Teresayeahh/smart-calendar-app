@@ -12,15 +12,14 @@ import {
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 
-import { createTask, getTasks, getPhases, getDayOverrides, getPendingTimeBlocks } from '../../db/queries';
-import { scheduleTask } from '../../lib/scheduler';
+import { createTask, getTasks } from '../../db/queries';
 import { useAppStore } from '../../lib/store';
 
 const BLUE = '#208AEF';
 
 export default function NewTaskScreen() {
   const db = useSQLiteContext();
-  const { state, dispatch } = useAppStore();
+  const { dispatch } = useAppStore();
 
   const [name, setName] = useState('');
   const [totalDuration, setTotalDuration] = useState('');
@@ -28,7 +27,7 @@ export default function NewTaskScreen() {
   const [deadline, setDeadline] = useState('');
   const [hasDeadline, setHasDeadline] = useState(true);
 
-  async function handlePreview() {
+  async function handleSubmit() {
     if (!name.trim()) { Alert.alert('请输入任务名称'); return; }
     const total = parseInt(totalDuration);
     const block = parseInt(blockDuration);
@@ -39,9 +38,6 @@ export default function NewTaskScreen() {
       return;
     }
 
-    const today = new Date().toISOString().slice(0, 10);
-
-    // Create task in DB first (needed for scheduling)
     const task = await createTask(db, {
       parentId: null,
       name: name.trim(),
@@ -50,33 +46,26 @@ export default function NewTaskScreen() {
       deadline: hasDeadline ? deadline : null,
     });
 
-    const [phases, overrides, existingBlocks] = await Promise.all([
-      getPhases(db),
-      getDayOverrides(db),
-      getPendingTimeBlocks(db, today),
-    ]);
-
-    if (!hasDeadline || !task.deadline) {
-      // No scheduling needed
+    if (!hasDeadline) {
+      // No deadline — save without scheduling
       const tasks = await getTasks(db, 'active');
       dispatch({ type: 'SET_TASKS', tasks });
       router.back();
       return;
     }
 
-    const result = scheduleTask(task, phases, overrides, existingBlocks, today);
-
+    // Let schedule-preview fetch data & run scheduler itself
     router.replace({
       pathname: '/schedule-preview',
-      params: {
-        taskId: task.id,
-        taskName: task.name,
-        blocks: JSON.stringify(result.blocks),
-        conflict: result.conflict ? '1' : '0',
-        conflictMessage: result.conflictMessage ?? '',
-      },
+      params: { taskId: task.id },
     });
   }
+
+  const total = parseInt(totalDuration);
+  const block = parseInt(blockDuration);
+  const blockCount = (!isNaN(total) && !isNaN(block) && block > 0)
+    ? Math.ceil(total / block)
+    : null;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -107,10 +96,8 @@ export default function NewTaskScreen() {
           placeholder="例如：60"
           keyboardType="number-pad"
         />
-        {totalDuration && blockDuration && !isNaN(parseInt(totalDuration)) && !isNaN(parseInt(blockDuration)) && (
-          <Text style={styles.hint}>
-            需要 {Math.ceil(parseInt(totalDuration) / parseInt(blockDuration))} 个时间块
-          </Text>
+        {blockCount !== null && (
+          <Text style={styles.hint}>需要 {blockCount} 个时间块</Text>
         )}
       </Field>
 
@@ -131,7 +118,7 @@ export default function NewTaskScreen() {
         </Field>
       )}
 
-      <TouchableOpacity style={styles.btn} onPress={handlePreview}>
+      <TouchableOpacity style={styles.btn} onPress={handleSubmit}>
         <Text style={styles.btnText}>{hasDeadline ? '生成排程预览' : '直接保存'}</Text>
       </TouchableOpacity>
     </ScrollView>
@@ -163,7 +150,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAFAFA',
   },
   hint: { marginTop: 4, fontSize: 12, color: '#888' },
-  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  switchRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
   btn: { backgroundColor: BLUE, borderRadius: 12, paddingVertical: 15, alignItems: 'center', marginTop: 8 },
   btnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });

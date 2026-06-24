@@ -14,22 +14,15 @@ import { useSQLiteContext } from 'expo-sqlite';
 import {
   getHabit,
   updateHabit,
-  getHabits,
   deleteTimeBlocksForSource,
-  getPhases,
-  getDayOverrides,
-  getPendingTimeBlocks,
   type Habit,
 } from '../../db/queries';
-import { scheduleHabit } from '../../lib/scheduler';
-import { useAppStore } from '../../lib/store';
 
 const PURPLE = '#AF52DE';
 
 export default function EditHabitScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
-  const { dispatch } = useAppStore();
 
   const [habit, setHabit] = useState<Habit | null>(null);
   const [name, setName] = useState('');
@@ -38,16 +31,14 @@ export default function EditHabitScreen() {
   const [cycleEnd, setCycleEnd] = useState('');
 
   useEffect(() => {
-    async function load() {
-      const h = await getHabit(db, id);
+    getHabit(db, id).then(h => {
       if (!h) return;
       setHabit(h);
       setName(h.name);
       setDuration(String(h.durationPerSession));
       setTimesPerWeek(String(h.timesPerWeek));
       setCycleEnd(h.cycleEnd);
-    }
-    load();
+    });
   }, [id]);
 
   async function handleSave() {
@@ -55,49 +46,17 @@ export default function EditHabitScreen() {
     const dur = parseInt(duration);
     const freq = parseInt(timesPerWeek);
     if (isNaN(dur) || dur <= 0) { Alert.alert('请输入有效时长'); return; }
-    if (isNaN(freq) || freq <= 0 || freq > 7) { Alert.alert('频次 1–7 次/周'); return; }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(cycleEnd)) { Alert.alert('结束日期格式错误'); return; }
+    if (isNaN(freq) || freq < 1 || freq > 7) { Alert.alert('频次 1–7 次/周'); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(cycleEnd)) { Alert.alert('结束日期格式错误，请用 YYYY-MM-DD'); return; }
 
-    await updateHabit(db, id, {
-      name: name.trim(),
-      durationPerSession: dur,
-      timesPerWeek: freq,
-      cycleEnd,
-    });
-
-    // Delete and reschedule
+    await updateHabit(db, id, { name: name.trim(), durationPerSession: dur, timesPerWeek: freq, cycleEnd });
     await deleteTimeBlocksForSource(db, id);
 
-    const today = new Date().toISOString().slice(0, 10);
-    const updatedHabit = await getHabit(db, id);
-    if (updatedHabit) {
-      const [phases, overrides, existingBlocks] = await Promise.all([
-        getPhases(db),
-        getDayOverrides(db),
-        getPendingTimeBlocks(db, today),
-      ]);
-      const result = scheduleHabit(updatedHabit, phases, overrides, existingBlocks, today);
-
-      router.replace({
-        pathname: '/schedule-preview',
-        params: {
-          taskId: id,
-          taskName: name.trim(),
-          blocks: JSON.stringify(result.blocks),
-          conflict: result.conflict ? '1' : '0',
-          conflictMessage: result.conflictMessage ?? '',
-          isHabit: '1',
-        },
-      });
-    }
+    router.replace({ pathname: '/schedule-preview', params: { taskId: id, isHabit: '1' } });
   }
 
   if (!habit) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <Text>加载中…</Text>
-      </View>
-    );
+    return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><Text>加载中…</Text></View>;
   }
 
   return (
@@ -111,7 +70,7 @@ export default function EditHabitScreen() {
       <Field label="每周频次 *">
         <TextInput style={styles.input} value={timesPerWeek} onChangeText={setTimesPerWeek} keyboardType="number-pad" />
       </Field>
-      <Field label="周期结束日期">
+      <Field label="周期结束日期（YYYY-MM-DD）">
         <TextInput style={styles.input} value={cycleEnd} onChangeText={setCycleEnd} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" />
       </Field>
       <TouchableOpacity style={[styles.btn, { backgroundColor: PURPLE }]} onPress={handleSave}>

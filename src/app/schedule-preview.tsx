@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,50 +6,105 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 
 import {
+  getTask,
+  getHabit,
+  getPhases,
+  getDayOverrides,
+  getPendingTimeBlocks,
   insertTimeBlocks,
   deleteTimeBlocksForSource,
   getTimeBlocksForDate,
   getTasks,
   getHabits,
+  updateTimeBlock,
 } from '../db/queries';
+import {
+  scheduleTask,
+  scheduleHabit,
+  type ScheduledBlock,
+} from '../lib/scheduler';
 import { scheduleBlockReminder } from '../lib/notifications';
 import { useAppStore } from '../lib/store';
-import type { ScheduledBlock } from '../lib/scheduler';
+import { localDateStr } from '../lib/dateUtils';
 
 const BLUE = '#208AEF';
-const GREEN = '#34C759';
 const ORANGE = '#FF9500';
 const PURPLE = '#AF52DE';
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 export default function SchedulePreviewScreen() {
-  const params = useLocalSearchParams<{
+  const { taskId, isHabit: isHabitParam } = useLocalSearchParams<{
     taskId: string;
-    taskName: string;
-    blocks: string;
-    conflict: string;
-    conflictMessage: string;
     isHabit?: string;
   }>();
 
   const db = useSQLiteContext();
   const { dispatch } = useAppStore();
 
-  const isHabit = params.isHabit === '1';
-  const hasConflict = params.conflict === '1';
-  const blocks: ScheduledBlock[] = JSON.parse(params.blocks ?? '[]');
+  const isHabit = isHabitParam === '1';
+  const accentColor = isHabit ? PURPLE : BLUE;
 
+  const [loading, setLoading] = useState(true);
+  const [sourceName, setSourceName] = useState('');
+  const [blocks, setBlocks] = useState<ScheduledBlock[]>([]);
+  const [conflict, setConflict] = useState(false);
+  const [conflictMessage, setConflictMessage] = useState('');
   const [applying, setApplying] = useState(false);
 
-  // Group by date
+  useEffect(() => {
+    async function runScheduler() {
+      try {
+        const today = localDateStr();
+        const [phases, overrides, existingBlocks] = await Promise.all([
+          getPhases(db),
+          getDayOverrides(db),
+          getPendingTimeBlocks(db, today),
+        ]);
+
+        if (phases.length === 0) {
+          setConflict(true);
+          setConflictMessage('未找到时间阶段配置，请先在「设置」里添加时间阶段。');
+          setLoading(false);
+          return;
+        }
+
+        if (isHabit) {
+          const habit = await getHabit(db, taskId);
+          if (!habit) { setConflict(true); setConflictMessage('习惯不存在'); setLoading(false); return; }
+          setSourceName(habit.name);
+          const result = scheduleHabit(habit, phases, overrides, existingBlocks, today);
+          setBlocks(result.blocks);
+          setConflict(result.conflict);
+          setConflictMessage(result.conflictMessage ?? '');
+        } else {
+          const task = await getTask(db, taskId);
+          if (!task) { setConflict(true); setConflictMessage('任务不存在'); setLoading(false); return; }
+          setSourceName(task.name);
+          if (!task.deadline) {
+            // No deadline — nothing to schedule; just go back
+            const tasks = await getTasks(db, 'active');
+            dispatch({ type: 'SET_TASKS', tasks });
+            router.replace('/(tabs)/tasks');
+            return;
+          }
+          const result = scheduleTask(task, phases, overrides, existingBlocks, today);
+          setBlocks(result.blocks);
+          setConflict(result.conflict);
+          setConflictMessage(result.conflictMessage ?? '');
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+    runScheduler();
+  }, [taskId]);
+
+  // Group blocks by date
   const grouped: Record<string, ScheduledBlock[]> = {};
   for (const b of blocks) {
     if (!grouped[b.date]) grouped[b.date] = [];
@@ -64,22 +119,17 @@ export default function SchedulePreviewScreen() {
     }
     setApplying(true);
     try {
-      // Delete any existing pending blocks for this source first
-      await deleteTimeBlocksForSource(db, params.taskId);
-
+      await deleteTimeBlocksForSource(db, taskId);
       const inserted = await insertTimeBlocks(db, blocks);
 
-      // Schedule notifications
       for (const block of inserted) {
-        const notifId = await scheduleBlockReminder(block, params.taskName);
+        const notifId = await scheduleBlockReminder(block, sourceName);
         if (notifId) {
-          const { updateTimeBlock } = await import('../db/queries');
           await updateTimeBlock(db, block.id, { notificationId: notifId });
         }
       }
 
-      // Refresh store
-      const today = todayStr();
+      const today = localDateStr();
       const [todayBlocks, tasks, habits] = await Promise.all([
         getTimeBlocksForDate(db, today),
         getTasks(db, 'active'),
@@ -98,19 +148,18 @@ export default function SchedulePreviewScreen() {
   }
 
   async function handleDiscard() {
-    // Delete the task/habit that was already created
     Alert.alert('取消排程', '确定放弃？已创建的任务也将被删除。', [
-      { text: '继续编辑', style: 'cancel' },
+      { text: '继续', style: 'cancel' },
       {
         text: '放弃',
         style: 'destructive',
         onPress: async () => {
           if (isHabit) {
             const { deleteHabit } = await import('../db/queries');
-            await deleteHabit(db, params.taskId);
+            await deleteHabit(db, taskId);
           } else {
             const { deleteTask } = await import('../db/queries');
-            await deleteTask(db, params.taskId);
+            await deleteTask(db, taskId);
           }
           router.replace('/(tabs)/tasks');
         },
@@ -118,44 +167,56 @@ export default function SchedulePreviewScreen() {
     ]);
   }
 
-  const accentColor = isHabit ? PURPLE : BLUE;
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={BLUE} />
+        <Text style={styles.loadingText}>正在计算排程…</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        <Text style={styles.taskName}>{params.taskName}</Text>
+        <Text style={styles.taskName}>{sourceName}</Text>
         <Text style={styles.subtitle}>
           {isHabit ? '习惯' : '任务'} · 共 {blocks.length} 个时间块
         </Text>
 
-        {hasConflict && (
+        {conflict && (
           <View style={styles.conflictBanner}>
             <Text style={styles.conflictTitle}>⚠️ 注意</Text>
-            <Text style={styles.conflictText}>{params.conflictMessage}</Text>
+            <Text style={styles.conflictText}>{conflictMessage}</Text>
           </View>
         )}
 
-        {dates.map(date => (
-          <View key={date} style={styles.dateGroup}>
-            <Text style={styles.dateLabel}>{date}</Text>
-            {grouped[date].map((b, i) => (
-              <View key={i} style={[styles.blockRow, { borderLeftColor: accentColor }]}>
-                <Text style={styles.blockTime}>{b.startTime} – {b.endTime}</Text>
-                <View style={[styles.badge, { backgroundColor: accentColor + '20' }]}>
-                  <Text style={[styles.badgeText, { color: accentColor }]}>
-                    {isHabit ? '习惯' : '任务'}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        ))}
-
-        {blocks.length === 0 && (
+        {blocks.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyText}>没有可排的时间块</Text>
-            <Text style={styles.emptyHint}>请检查时间阶段设置或调整截止日期</Text>
+            <Text style={styles.emptyHint}>
+              请检查：{'\n'}
+              • 设置里是否有时间阶段{'\n'}
+              • 截止日期是否在今天之后{'\n'}
+              • 每块时长是否超过每日可用时间
+            </Text>
           </View>
+        ) : (
+          dates.map(date => (
+            <View key={date} style={styles.dateGroup}>
+              <Text style={styles.dateLabel}>{date}</Text>
+              {grouped[date].map((b, i) => (
+                <View key={i} style={[styles.blockRow, { borderLeftColor: accentColor }]}>
+                  <Text style={styles.blockTime}>{b.startTime} – {b.endTime}</Text>
+                  <View style={[styles.badge, { backgroundColor: accentColor + '20' }]}>
+                    <Text style={[styles.badgeText, { color: accentColor }]}>
+                      {isHabit ? '习惯' : '任务'}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ))
         )}
 
         <View style={{ height: 120 }} />
@@ -166,7 +227,11 @@ export default function SchedulePreviewScreen() {
           <Text style={styles.discardText}>放弃</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.applyBtn, { backgroundColor: accentColor }, applying && styles.btnDisabled]}
+          style={[
+            styles.applyBtn,
+            { backgroundColor: accentColor },
+            (applying || blocks.length === 0) && styles.btnDisabled,
+          ]}
           onPress={handleApply}
           disabled={applying || blocks.length === 0}
         >
@@ -179,6 +244,8 @@ export default function SchedulePreviewScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F7' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  loadingText: { marginTop: 12, color: '#666', fontSize: 14 },
   scroll: { flex: 1 },
   content: { padding: 20 },
   taskName: { fontSize: 22, fontWeight: '700', color: '#111', marginBottom: 4 },
@@ -192,9 +259,16 @@ const styles = StyleSheet.create({
     borderLeftColor: ORANGE,
   },
   conflictTitle: { fontSize: 14, fontWeight: '700', color: '#856404', marginBottom: 4 },
-  conflictText: { fontSize: 13, color: '#856404', lineHeight: 18 },
+  conflictText: { fontSize: 13, color: '#856404', lineHeight: 20 },
   dateGroup: { marginBottom: 16 },
-  dateLabel: { fontSize: 13, fontWeight: '600', color: '#666', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  dateLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   blockRow: {
     backgroundColor: '#fff',
     borderRadius: 8,
@@ -208,9 +282,9 @@ const styles = StyleSheet.create({
   blockTime: { fontSize: 15, fontWeight: '500', color: '#111' },
   badge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   badgeText: { fontSize: 12, fontWeight: '600' },
-  empty: { paddingTop: 40, alignItems: 'center' },
-  emptyText: { fontSize: 17, fontWeight: '600', color: '#555', marginBottom: 8 },
-  emptyHint: { fontSize: 14, color: '#999' },
+  empty: { paddingTop: 32, alignItems: 'flex-start' },
+  emptyText: { fontSize: 17, fontWeight: '600', color: '#555', marginBottom: 12 },
+  emptyHint: { fontSize: 14, color: '#999', lineHeight: 22 },
   footer: {
     flexDirection: 'row',
     padding: 16,
@@ -229,12 +303,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   discardText: { fontSize: 15, color: '#666', fontWeight: '500' },
-  applyBtn: {
-    flex: 2,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
+  applyBtn: { flex: 2, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   applyText: { fontSize: 15, color: '#fff', fontWeight: '600' },
-  btnDisabled: { opacity: 0.6 },
+  btnDisabled: { opacity: 0.5 },
 });

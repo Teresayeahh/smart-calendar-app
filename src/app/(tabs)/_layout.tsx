@@ -13,13 +13,10 @@ import {
 } from '../../db/queries';
 import { useAppStore } from '../../lib/store';
 import { requestNotificationPermissions } from '../../lib/notifications';
+import { localDateStr } from '../../lib/dateUtils';
 
 const BLUE = '#208AEF';
 const PURPLE = '#AF52DE';
-
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 export default function TabsLayout() {
   const db = useSQLiteContext();
@@ -40,7 +37,7 @@ export default function TabsLayout() {
         const [tasks, habits, blocks, overrides] = await Promise.all([
           getTasks(db, 'active'),
           getHabits(db, 'active'),
-          getTimeBlocksForDate(db, todayStr()),
+          getTimeBlocksForDate(db, localDateStr()),
           getDayOverrides(db),
         ]);
 
@@ -99,6 +96,10 @@ export default function TabsLayout() {
           tabBarLabel: '设置',
           tabBarIcon: () => <Text style={{ fontSize: 20 }}>⚙️</Text>,
         }}
+      />
+      <Tabs.Screen
+        name="week"
+        options={{ href: null }}
       />
     </Tabs>
   );

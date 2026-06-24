@@ -17,12 +17,8 @@ import {
   updateTask,
   getTasks,
   deleteTimeBlocksForSource,
-  getPendingTimeBlocks,
-  getPhases,
-  getDayOverrides,
   type Task,
 } from '../../db/queries';
-import { scheduleTask } from '../../lib/scheduler';
 import { useAppStore } from '../../lib/store';
 
 const BLUE = '#208AEF';
@@ -40,8 +36,7 @@ export default function EditTaskScreen() {
   const [hasDeadline, setHasDeadline] = useState(true);
 
   useEffect(() => {
-    async function load() {
-      const t = await getTask(db, id);
+    getTask(db, id).then(t => {
       if (!t) return;
       setTask(t);
       setName(t.name);
@@ -49,8 +44,7 @@ export default function EditTaskScreen() {
       setBlockDuration(t.blockDuration ? String(t.blockDuration) : '');
       setDeadline(t.deadline ?? '');
       setHasDeadline(!!t.deadline);
-    }
-    load();
+    });
   }, [id]);
 
   async function handleSave() {
@@ -71,38 +65,24 @@ export default function EditTaskScreen() {
       deadline: hasDeadline ? deadline : null,
     });
 
-    // Delete existing pending blocks and reschedule
+    // Clear old pending blocks; preview will reschedule
     await deleteTimeBlocksForSource(db, id);
 
-    if (hasDeadline && deadline) {
-      const today = new Date().toISOString().slice(0, 10);
-      const updatedTask = await getTask(db, id);
-      if (updatedTask) {
-        const [phases, overrides, existingBlocks] = await Promise.all([
-          getPhases(db),
-          getDayOverrides(db),
-          getPendingTimeBlocks(db, today),
-        ]);
-        const result = scheduleTask(updatedTask, phases, overrides, existingBlocks, today);
-
-        router.replace({
-          pathname: '/schedule-preview',
-          params: {
-            taskId: id,
-            taskName: name.trim(),
-            blocks: JSON.stringify(result.blocks),
-            conflict: result.conflict ? '1' : '0',
-            conflictMessage: result.conflictMessage ?? '',
-          },
-        });
-        return;
-      }
+    if (!hasDeadline) {
+      const tasks = await getTasks(db, 'active');
+      dispatch({ type: 'SET_TASKS', tasks });
+      router.back();
+      return;
     }
 
-    const tasks = await getTasks(db, 'active');
-    dispatch({ type: 'SET_TASKS', tasks });
-    router.back();
+    router.replace({ pathname: '/schedule-preview', params: { taskId: id } });
   }
+
+  const total = parseInt(totalDuration);
+  const block = parseInt(blockDuration);
+  const blockCount = (!isNaN(total) && !isNaN(block) && block > 0)
+    ? Math.ceil(total / block)
+    : null;
 
   if (!task) {
     return (
@@ -122,9 +102,7 @@ export default function EditTaskScreen() {
       </Field>
       <Field label="每块时长（分钟）*">
         <TextInput style={styles.input} value={blockDuration} onChangeText={setBlockDuration} keyboardType="number-pad" />
-        {totalDuration && blockDuration && (
-          <Text style={styles.hint}>需要 {Math.ceil(parseInt(totalDuration) / parseInt(blockDuration))} 个时间块</Text>
-        )}
+        {blockCount !== null && <Text style={styles.hint}>需要 {blockCount} 个时间块</Text>}
       </Field>
       <View style={styles.switchRow}>
         <Text style={styles.label}>有截止日期</Text>

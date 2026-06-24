@@ -8,9 +8,10 @@ import {
   Alert,
   RefreshControl,
 } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, Link } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 
+import { localDateStr } from '../../lib/dateUtils';
 import {
   getTimeBlocksForDate,
   updateTimeBlock,
@@ -30,9 +31,7 @@ const BLUE = '#208AEF';
 const GREEN = '#34C759';
 const ORANGE = '#FF9500';
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
+const todayStr = localDateStr;
 
 function formatChineseDate(dateStr: string) {
   const [y, m, d] = dateStr.split('-');
@@ -147,12 +146,17 @@ export default function TodayScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.dateText}>{formatChineseDate(todayStr())}</Text>
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={() => router.push('/task/new')}
-        >
-          <Text style={styles.addBtnText}>+ 新任务</Text>
-        </TouchableOpacity>
+        <View style={styles.headerBtns}>
+          <TouchableOpacity
+            style={[styles.addBtn, { backgroundColor: '#F0F0F3' }]}
+            onPress={() => router.push('/(tabs)/week')}
+          >
+            <Text style={[styles.addBtnText, { color: '#444' }]}>📅 周</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.addBtn} onPress={() => router.push('/task/new')}>
+            <Text style={styles.addBtnText}>+ 新任务</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -262,6 +266,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#DDD',
   },
   dateText: { fontSize: 17, fontWeight: '600', color: '#111' },
+  headerBtns: { flexDirection: 'row', gap: 8 },
   addBtn: { backgroundColor: BLUE, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   addBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   scroll: { flex: 1 },
