@@ -208,61 +208,67 @@ export function scheduleHabit(
 ): ScheduleResult {
   const start = today > habit.cycleStart ? today : habit.cycleStart;
   const end = habit.cycleEnd;
-  const dates = dateRange(start, end);
+  const allDates = dateRange(start, end);
   const blockMins = habit.durationPerSession;
 
-  // Count real Mon-Sun calendar weeks that intersect the cycle
-  const distinctWeeks = new Set(dates.map(d => getWeekKey(d)));
-  const targetTotal = distinctWeeks.size * habit.timesPerWeek;
-
-  const scheduled: ScheduledBlock[] = [];
-  const allBlocks = [...existingBlocks];
-
-  // Track how many times per calendar week we've scheduled this habit
-  const weekCount: Record<string, number> = {};
-
-  for (const date of dates) {
-    if (scheduled.length >= targetTotal) break;
-
-    const weekKey = getWeekKey(date);
-
-    if ((weekCount[weekKey] ?? 0) >= habit.timesPerWeek) continue;
-
-    // Don't schedule same habit twice on same day
-    const alreadyToday = allBlocks.some(
-      b => b.sourceId === habit.id && b.date === date && b.status !== 'done'
-    );
-    if (alreadyToday) continue;
-
-    const slots = getFreeSlotsForDate(date, phases, overrides, allBlocks);
-    for (const slot of slots) {
-      if (slot.end - slot.start >= blockMins) {
-        const block: ScheduledBlock = {
-          sourceId: habit.id,
-          sourceType: 'habit',
-          date,
-          startTime: minutesToTime(slot.start),
-          endTime: minutesToTime(slot.start + blockMins),
-          status: 'pending',
-        };
-        scheduled.push(block);
-        allBlocks.push({
-          id: `tmp-${scheduled.length}`,
-          sourceId: habit.id,
-          sourceType: 'habit',
-          date,
-          startTime: block.startTime,
-          endTime: block.endTime,
-          status: 'pending',
-          notificationId: null,
-        });
-        weekCount[weekKey] = (weekCount[weekKey] ?? 0) + 1;
-        break; // one per day per habit
-      }
+  // Group dates into Mon-Sun calendar weeks (in chronological order).
+  // Since allDates is sequential, consecutive same-weekKey entries form one group.
+  const weekGroups: string[][] = [];
+  let lastKey = '';
+  for (const date of allDates) {
+    const wk = getWeekKey(date);
+    if (wk !== lastKey) {
+      weekGroups.push([]);
+      lastKey = wk;
     }
+    weekGroups[weekGroups.length - 1].push(date);
   }
 
-  if (scheduled.length < targetTotal) {
+  const targetTotal = weekGroups.length * habit.timesPerWeek;
+  const scheduled: ScheduledBlock[] = [];
+  const allBlocks = [...existingBlocks];
+  let totalMissed = 0;
+
+  for (const weekDates of weekGroups) {
+    let countThisWeek = 0;
+
+    for (const date of weekDates) {
+      // Hard cap: stop as soon as we hit the weekly quota
+      if (countThisWeek >= habit.timesPerWeek) break;
+
+      const slots = getFreeSlotsForDate(date, phases, overrides, allBlocks);
+      for (const slot of slots) {
+        if (slot.end - slot.start >= blockMins) {
+          const block: ScheduledBlock = {
+            sourceId: habit.id,
+            sourceType: 'habit',
+            date,
+            startTime: minutesToTime(slot.start),
+            endTime: minutesToTime(slot.start + blockMins),
+            status: 'pending',
+          };
+          scheduled.push(block);
+          // Mark the slot busy so subsequent days/weeks respect it
+          allBlocks.push({
+            id: `tmp-${scheduled.length}`,
+            sourceId: habit.id,
+            sourceType: 'habit',
+            date,
+            startTime: block.startTime,
+            endTime: block.endTime,
+            status: 'pending',
+            notificationId: null,
+          });
+          countThisWeek++;
+          break; // one session per day
+        }
+      }
+    }
+
+    totalMissed += habit.timesPerWeek - countThisWeek;
+  }
+
+  if (totalMissed > 0) {
     return {
       blocks: scheduled,
       conflict: true,
