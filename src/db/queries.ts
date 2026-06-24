@@ -32,6 +32,11 @@ export interface Task {
   totalDuration: number | null;
   blockDuration: number | null;
   deadline: string | null;
+  taskVolume: string | null;
+  blockPreferMin: number | null;
+  blockPreferMax: number | null;
+  preferredTimeStart: string | null;
+  preferredTimeEnd: string | null;
   status: TaskStatus;
 }
 
@@ -42,6 +47,8 @@ export interface Habit {
   timesPerWeek: number;
   cycleStart: string;
   cycleEnd: string;
+  preferredTimeStart: string | null;
+  preferredTimeEnd: string | null;
   status: HabitStatus;
 }
 
@@ -157,14 +164,20 @@ export async function createTask(
 ): Promise<Task> {
   const id = randomUUID();
   await db.runAsync(
-    `INSERT INTO tasks (id, parentId, name, totalDuration, blockDuration, deadline, status)
-     VALUES (?, ?, ?, ?, ?, ?, 'active')`,
+    `INSERT INTO tasks (id, parentId, name, totalDuration, blockDuration, deadline,
+       taskVolume, blockPreferMin, blockPreferMax, preferredTimeStart, preferredTimeEnd, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
     id,
     task.parentId ?? null,
     task.name,
     task.totalDuration ?? null,
     task.blockDuration ?? null,
-    task.deadline ?? null
+    task.deadline ?? null,
+    task.taskVolume ?? null,
+    task.blockPreferMin ?? null,
+    task.blockPreferMax ?? null,
+    task.preferredTimeStart ?? null,
+    task.preferredTimeEnd ?? null
   );
   return { ...task, id, status: 'active' };
 }
@@ -211,14 +224,17 @@ export async function createHabit(
 ): Promise<Habit> {
   const id = randomUUID();
   await db.runAsync(
-    `INSERT INTO habits (id, name, durationPerSession, timesPerWeek, cycleStart, cycleEnd, status)
-     VALUES (?, ?, ?, ?, ?, ?, 'active')`,
+    `INSERT INTO habits (id, name, durationPerSession, timesPerWeek, cycleStart, cycleEnd,
+       preferredTimeStart, preferredTimeEnd, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
     id,
     habit.name,
     habit.durationPerSession,
     habit.timesPerWeek,
     habit.cycleStart,
-    habit.cycleEnd
+    habit.cycleEnd,
+    habit.preferredTimeStart ?? null,
+    habit.preferredTimeEnd ?? null
   );
   return { ...habit, id, status: 'active' };
 }

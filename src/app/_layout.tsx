@@ -27,6 +27,10 @@ export default function RootLayout() {
             options={{ headerShown: true, title: '添加子任务', presentation: 'modal' }}
           />
           <Stack.Screen
+            name="subtask/[id]"
+            options={{ headerShown: true, title: '编辑子任务', presentation: 'modal' }}
+          />
+          <Stack.Screen
             name="habit/new"
             options={{ headerShown: true, title: '新建习惯', presentation: 'modal' }}
           />

@@ -26,6 +26,11 @@ export const CREATE_TABLES_SQL = `
     totalDuration INTEGER,
     blockDuration INTEGER,
     deadline TEXT,
+    taskVolume TEXT,
+    blockPreferMin INTEGER,
+    blockPreferMax INTEGER,
+    preferredTimeStart TEXT,
+    preferredTimeEnd TEXT,
     status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','completed','cancelled')),
     createdAt INTEGER NOT NULL DEFAULT (strftime('%s','now')),
     FOREIGN KEY (parentId) REFERENCES tasks(id) ON DELETE CASCADE
@@ -38,6 +43,8 @@ export const CREATE_TABLES_SQL = `
     timesPerWeek INTEGER NOT NULL,
     cycleStart TEXT NOT NULL,
     cycleEnd TEXT NOT NULL,
+    preferredTimeStart TEXT,
+    preferredTimeEnd TEXT,
     status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','expired','cancelled')),
     createdAt INTEGER NOT NULL DEFAULT (strftime('%s','now'))
   );

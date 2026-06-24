@@ -32,6 +32,11 @@ export default function NewTaskScreen() {
       totalDuration: null,
       blockDuration: null,
       deadline,
+      taskVolume: null,
+      blockPreferMin: null,
+      blockPreferMax: null,
+      preferredTimeStart: null,
+      preferredTimeEnd: null,
     });
 
     router.replace({ pathname: '/task/[id]', params: { id: task.id } });

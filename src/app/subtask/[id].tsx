@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,27 +11,43 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 
-import { createTask } from '../../db/queries';
+import { getTask, updateTask, deleteTimeBlocksForSource } from '../../db/queries';
 import { DatePickerInput } from '../../components/DatePickerInput';
 import { TimePickerInput } from '../../components/TimePickerInput';
 import { localDateStr } from '../../lib/dateUtils';
 
 const BLUE = '#208AEF';
 
-export default function NewSubtaskScreen() {
-  const { parentId } = useLocalSearchParams<{ parentId: string }>();
+export default function EditSubtaskScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
   const db = useSQLiteContext();
 
   const [name, setName] = useState('');
+  const [taskVolume, setTaskVolume] = useState('');
   const [totalDuration, setTotalDuration] = useState('');
   const [deadline, setDeadline] = useState('');
-  const [taskVolume, setTaskVolume] = useState('');
   const [blockPreferMin, setBlockPreferMin] = useState('');
   const [blockPreferMax, setBlockPreferMax] = useState('');
   const [preferStart, setPreferStart] = useState('');
   const [preferEnd, setPreferEnd] = useState('');
+  const [loaded, setLoaded] = useState(false);
 
-  async function handleCreate() {
+  useEffect(() => {
+    getTask(db, id).then(t => {
+      if (!t) return;
+      setName(t.name);
+      setTaskVolume(t.taskVolume ?? '');
+      setTotalDuration(t.totalDuration != null ? String(t.totalDuration) : '');
+      setDeadline(t.deadline ?? '');
+      setBlockPreferMin(t.blockPreferMin != null ? String(t.blockPreferMin) : '');
+      setBlockPreferMax(t.blockPreferMax != null ? String(t.blockPreferMax) : '');
+      setPreferStart(t.preferredTimeStart ?? '');
+      setPreferEnd(t.preferredTimeEnd ?? '');
+      setLoaded(true);
+    });
+  }, [id]);
+
+  async function handleSave() {
     if (!name.trim()) { Alert.alert('请输入子任务名称'); return; }
     const total = parseInt(totalDuration);
     if (isNaN(total) || total <= 0) { Alert.alert('请输入有效的总耗时（分钟）'); return; }
@@ -43,38 +59,45 @@ export default function NewSubtaskScreen() {
     const preferMin = blockPreferMin ? parseInt(blockPreferMin) : null;
     const preferMax = blockPreferMax ? parseInt(blockPreferMax) : null;
     if (preferMin !== null && (isNaN(preferMin) || preferMin <= 0)) {
-      Alert.alert('单块最短时间无效'); return;
+      Alert.alert('偏好用时最短时间无效'); return;
     }
     if (preferMax !== null && (isNaN(preferMax) || preferMax <= 0)) {
-      Alert.alert('单块最长时间无效'); return;
+      Alert.alert('偏好用时最长时间无效'); return;
     }
     if (preferMin !== null && preferMax !== null && preferMin > preferMax) {
       Alert.alert('最短时间不能大于最长时间'); return;
     }
 
-    // Block size: use blockPreferMax if set, else default to min(total, 60)
     const blockDur = preferMax ?? Math.min(total, 60);
 
-    const sub = await createTask(db, {
-      parentId,
+    await updateTask(db, id, {
       name: name.trim(),
+      taskVolume: taskVolume.trim() || null,
       totalDuration: total,
       blockDuration: blockDur,
       deadline,
-      taskVolume: taskVolume.trim() || null,
       blockPreferMin: preferMin,
       blockPreferMax: preferMax,
       preferredTimeStart: preferStart || null,
       preferredTimeEnd: preferEnd || null,
     });
+    await deleteTimeBlocksForSource(db, id);
 
-    router.replace({ pathname: '/schedule-preview', params: { taskId: sub.id } });
+    router.replace({ pathname: '/schedule-preview', params: { taskId: id } });
   }
 
   const dur = parseInt(totalDuration);
   const bMax = blockPreferMax ? parseInt(blockPreferMax) : null;
   const blockSize = bMax && !isNaN(bMax) ? bMax : Math.min(isNaN(dur) ? 60 : dur, 60);
   const blocks = !isNaN(dur) && dur > 0 ? Math.ceil(dur / blockSize) : null;
+
+  if (!loaded) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <Text>加载中…</Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -83,7 +106,6 @@ export default function NewSubtaskScreen() {
           style={styles.input}
           value={name}
           onChangeText={setName}
-          placeholder="例如：撰写第一章"
           autoFocus
         />
       </Field>
@@ -104,9 +126,7 @@ export default function NewSubtaskScreen() {
           placeholder="例如：120"
         />
         {blocks !== null && (
-          <Text style={styles.hint}>
-            将拆分为 {blocks} 个时间块（每块 {blockSize} 分钟）
-          </Text>
+          <Text style={styles.hint}>将拆分为 {blocks} 个时间块（每块 {blockSize} 分钟）</Text>
         )}
       </Field>
       <Field label="截止日期 *">
@@ -152,8 +172,8 @@ export default function NewSubtaskScreen() {
         </View>
         <Text style={styles.hint}>排程优先安排在此时间段内，超出时以浅红色提示</Text>
       </Field>
-      <TouchableOpacity style={styles.btn} onPress={handleCreate}>
-        <Text style={styles.btnText}>生成排程预览</Text>
+      <TouchableOpacity style={styles.btn} onPress={handleSave}>
+        <Text style={styles.btnText}>保存并重新排程</Text>
       </TouchableOpacity>
     </ScrollView>
   );

@@ -180,6 +180,7 @@ export default function TaskDetailScreen() {
             <SubtaskCard
               key={sub.id}
               subtask={sub}
+              onEdit={() => router.push({ pathname: '/subtask/[id]', params: { id: sub.id } })}
               onDelete={() => handleDeleteSubtask(sub)}
             />
           ))
@@ -191,13 +192,16 @@ export default function TaskDetailScreen() {
 
 function SubtaskCard({
   subtask,
+  onEdit,
   onDelete,
 }: {
   subtask: Task;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
-  const blocks = subtask.totalDuration && subtask.blockDuration
-    ? Math.ceil(subtask.totalDuration / subtask.blockDuration)
+  const blockSize = subtask.blockPreferMax ?? subtask.blockDuration;
+  const blocks = subtask.totalDuration && blockSize
+    ? Math.ceil(subtask.totalDuration / blockSize)
     : null;
 
   return (
@@ -205,21 +209,32 @@ function SubtaskCard({
       <View style={[styles.subAccent, { backgroundColor: BLUE }]} />
       <View style={styles.subMain}>
         <Text style={styles.subName}>{subtask.name}</Text>
+        {subtask.taskVolume ? (
+          <Text style={styles.subVolume}>{subtask.taskVolume}</Text>
+        ) : null}
         <View style={styles.subMeta}>
-          {subtask.totalDuration && (
+          {subtask.totalDuration ? (
             <Text style={styles.subMetaText}>⏱ {subtask.totalDuration} 分钟</Text>
-          )}
-          {blocks && (
+          ) : null}
+          {blocks ? (
             <Text style={styles.subMetaText}>🧩 {blocks} 块</Text>
-          )}
-          {subtask.deadline && (
+          ) : null}
+          {subtask.deadline ? (
             <Text style={styles.subMetaText}>📅 截止 {subtask.deadline}</Text>
-          )}
+          ) : null}
+          {subtask.preferredTimeStart && subtask.preferredTimeEnd ? (
+            <Text style={styles.subMetaText}>🕐 {subtask.preferredTimeStart}–{subtask.preferredTimeEnd}</Text>
+          ) : null}
         </View>
       </View>
-      <TouchableOpacity onPress={onDelete} style={styles.subDelete}>
-        <Text style={{ color: RED, fontSize: 15 }}>✕</Text>
-      </TouchableOpacity>
+      <View style={styles.subActions}>
+        <TouchableOpacity onPress={onEdit} style={styles.subEditBtn}>
+          <Text style={styles.subEditText}>编辑</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onDelete} style={styles.subDeleteBtn}>
+          <Text style={{ color: RED, fontSize: 15 }}>✕</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -290,8 +305,12 @@ const styles = StyleSheet.create({
   },
   subAccent: { width: 3, alignSelf: 'stretch' },
   subMain: { flex: 1, paddingHorizontal: 12, paddingVertical: 10 },
-  subName: { fontSize: 15, fontWeight: '600', color: '#111', marginBottom: 4 },
+  subName: { fontSize: 15, fontWeight: '600', color: '#111', marginBottom: 2 },
+  subVolume: { fontSize: 12, color: '#888', marginBottom: 4 },
   subMeta: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   subMetaText: { fontSize: 12, color: '#666' },
-  subDelete: { padding: 12 },
+  subActions: { flexDirection: 'row', alignItems: 'center', paddingRight: 4 },
+  subEditBtn: { paddingHorizontal: 8, paddingVertical: 10 },
+  subEditText: { fontSize: 13, color: BLUE, fontWeight: '500' },
+  subDeleteBtn: { padding: 10 },
 });

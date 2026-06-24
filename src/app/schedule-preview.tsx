@@ -86,7 +86,6 @@ export default function SchedulePreviewScreen() {
           if (!task) { setConflict(true); setConflictMessage('任务不存在'); setLoading(false); return; }
           setSourceName(task.name);
           if (!task.deadline) {
-            // No deadline — nothing to schedule; just go back
             const tasks = await getTasks(db, 'active');
             dispatch({ type: 'SET_TASKS', tasks });
             router.replace('/(tabs)/tasks');
@@ -111,6 +110,7 @@ export default function SchedulePreviewScreen() {
     grouped[b.date].push(b);
   }
   const dates = Object.keys(grouped).sort();
+  const outsideCount = blocks.filter(b => b.outsidePreference).length;
 
   async function handleApply() {
     if (blocks.length === 0) {
@@ -147,26 +147,6 @@ export default function SchedulePreviewScreen() {
     }
   }
 
-  async function handleDiscard() {
-    Alert.alert('取消排程', '确定放弃？已创建的任务也将被删除。', [
-      { text: '继续', style: 'cancel' },
-      {
-        text: '放弃',
-        style: 'destructive',
-        onPress: async () => {
-          if (isHabit) {
-            const { deleteHabit } = await import('../db/queries');
-            await deleteHabit(db, taskId);
-          } else {
-            const { deleteTask } = await import('../db/queries');
-            await deleteTask(db, taskId);
-          }
-          router.replace('/(tabs)/tasks');
-        },
-      },
-    ]);
-  }
-
   if (loading) {
     return (
       <View style={styles.center}>
@@ -191,6 +171,14 @@ export default function SchedulePreviewScreen() {
           </View>
         )}
 
+        {outsideCount > 0 && (
+          <View style={styles.outsideBanner}>
+            <Text style={styles.outsideText}>
+              浅红色时间块（{outsideCount} 个）超出偏好时间范围，已自动安排在其他空闲时段
+            </Text>
+          </View>
+        )}
+
         {blocks.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyText}>没有可排的时间块</Text>
@@ -206,12 +194,26 @@ export default function SchedulePreviewScreen() {
             <View key={date} style={styles.dateGroup}>
               <Text style={styles.dateLabel}>{date}</Text>
               {grouped[date].map((b, i) => (
-                <View key={i} style={[styles.blockRow, { borderLeftColor: accentColor }]}>
+                <View
+                  key={i}
+                  style={[
+                    styles.blockRow,
+                    { borderLeftColor: accentColor },
+                    b.outsidePreference && styles.blockRowOutside,
+                  ]}
+                >
                   <Text style={styles.blockTime}>{b.startTime} – {b.endTime}</Text>
-                  <View style={[styles.badge, { backgroundColor: accentColor + '20' }]}>
-                    <Text style={[styles.badgeText, { color: accentColor }]}>
-                      {isHabit ? '习惯' : '任务'}
-                    </Text>
+                  <View style={styles.badgeRow}>
+                    {b.outsidePreference && (
+                      <View style={styles.outsideBadge}>
+                        <Text style={styles.outsideBadgeText}>偏好外</Text>
+                      </View>
+                    )}
+                    <View style={[styles.badge, { backgroundColor: accentColor + '20' }]}>
+                      <Text style={[styles.badgeText, { color: accentColor }]}>
+                        {isHabit ? '习惯' : '任务'}
+                      </Text>
+                    </View>
                   </View>
                 </View>
               ))}
@@ -223,8 +225,8 @@ export default function SchedulePreviewScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.discardBtn} onPress={handleDiscard}>
-          <Text style={styles.discardText}>放弃</Text>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <Text style={styles.backText}>返回修改</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[
@@ -254,12 +256,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF3CD',
     borderRadius: 10,
     padding: 14,
-    marginBottom: 20,
+    marginBottom: 12,
     borderLeftWidth: 4,
     borderLeftColor: ORANGE,
   },
   conflictTitle: { fontSize: 14, fontWeight: '700', color: '#856404', marginBottom: 4 },
   conflictText: { fontSize: 13, color: '#856404', lineHeight: 20 },
+  outsideBanner: {
+    backgroundColor: '#FFEEEE',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B6B',
+  },
+  outsideText: { fontSize: 13, color: '#C0392B', lineHeight: 18 },
   dateGroup: { marginBottom: 16 },
   dateLabel: {
     fontSize: 13,
@@ -279,9 +290,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderLeftWidth: 4,
   },
+  blockRowOutside: {
+    backgroundColor: '#FFEEEE',
+  },
   blockTime: { fontSize: 15, fontWeight: '500', color: '#111' },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   badge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   badgeText: { fontSize: 12, fontWeight: '600' },
+  outsideBadge: {
+    backgroundColor: '#FFD0D0',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  outsideBadgeText: { fontSize: 12, fontWeight: '600', color: '#C0392B' },
   empty: { paddingTop: 32, alignItems: 'flex-start' },
   emptyText: { fontSize: 17, fontWeight: '600', color: '#555', marginBottom: 12 },
   emptyHint: { fontSize: 14, color: '#999', lineHeight: 22 },
@@ -294,7 +316,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#DDD',
     paddingBottom: 32,
   },
-  discardBtn: {
+  backBtn: {
     flex: 1,
     borderWidth: 1.5,
     borderColor: '#DDD',
@@ -302,7 +324,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
   },
-  discardText: { fontSize: 15, color: '#666', fontWeight: '500' },
+  backText: { fontSize: 15, color: '#666', fontWeight: '500' },
   applyBtn: { flex: 2, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   applyText: { fontSize: 15, color: '#fff', fontWeight: '600' },
   btnDisabled: { opacity: 0.5 },
