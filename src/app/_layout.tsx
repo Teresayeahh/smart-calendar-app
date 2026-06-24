@@ -1,15 +1,40 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import { useColorScheme } from 'react-native';
+import { Stack } from 'expo-router';
+import { SQLiteProvider } from 'expo-sqlite';
+import { StatusBar } from 'expo-status-bar';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { initDatabase } from '../db/database';
+import { AppProvider } from '../lib/store';
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+export default function RootLayout() {
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <SQLiteProvider databaseName="calendar.db" onInit={initDatabase}>
+      <AppProvider>
+        <StatusBar style="auto" />
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="onboarding" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="task/new"
+            options={{ headerShown: true, title: '新建任务', presentation: 'modal' }}
+          />
+          <Stack.Screen
+            name="task/[id]"
+            options={{ headerShown: true, title: '编辑任务', presentation: 'modal' }}
+          />
+          <Stack.Screen
+            name="habit/new"
+            options={{ headerShown: true, title: '新建习惯', presentation: 'modal' }}
+          />
+          <Stack.Screen
+            name="habit/[id]"
+            options={{ headerShown: true, title: '编辑习惯', presentation: 'modal' }}
+          />
+          <Stack.Screen
+            name="schedule-preview"
+            options={{ headerShown: true, title: '排程预览', presentation: 'modal' }}
+          />
+        </Stack>
+      </AppProvider>
+    </SQLiteProvider>
   );
 }

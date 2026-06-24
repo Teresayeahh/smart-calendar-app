@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "smart-calendar-app",
+    "name": "超级日程",
     "slug": "smart-calendar-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -17,7 +17,13 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.USE_EXACT_ALARM",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
+      ],
+      "package": "com.smartcalendar.app"
     },
     "web": {
       "output": "static",
@@ -33,6 +39,16 @@
             "image": "./assets/images/splash-icon.png",
             "imageWidth": 76
           }
+        }
+      ],
+      "expo-sqlite",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#208AEF",
+          "defaultChannel": "default",
+          "sounds": []
         }
       ]
     ],
