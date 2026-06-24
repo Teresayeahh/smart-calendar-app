@@ -43,6 +43,19 @@ function getWeekday(dateStr: string): number {
   return new Date(dateStr + 'T00:00:00').getDay(); // 0=Sun..6=Sat
 }
 
+// Returns YYYY-MM-DD of the Monday that starts the calendar week containing dateStr
+function getWeekKey(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  const dow = d.getDay(); // 0=Sun..6=Sat
+  const daysToMonday = dow === 0 ? 6 : dow - 1;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - daysToMonday);
+  const y = monday.getFullYear();
+  const mo = String(monday.getMonth() + 1).padStart(2, '0');
+  const da = String(monday.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${da}`;
+}
+
 // ─── Phase resolution ────────────────────────────────────────────────────────
 
 function getPhaseForDate(phases: Phase[], dateStr: string): Phase | null {
@@ -198,25 +211,20 @@ export function scheduleHabit(
   const dates = dateRange(start, end);
   const blockMins = habit.durationPerSession;
 
-  // Count weeks in the cycle
-  const totalDays = dates.length;
-  const totalWeeks = Math.ceil(totalDays / 7);
-  const targetTotal = totalWeeks * habit.timesPerWeek;
+  // Count real Mon-Sun calendar weeks that intersect the cycle
+  const distinctWeeks = new Set(dates.map(d => getWeekKey(d)));
+  const targetTotal = distinctWeeks.size * habit.timesPerWeek;
 
   const scheduled: ScheduledBlock[] = [];
   const allBlocks = [...existingBlocks];
 
-  // Track how many times per week we've scheduled this habit
+  // Track how many times per calendar week we've scheduled this habit
   const weekCount: Record<string, number> = {};
 
   for (const date of dates) {
     if (scheduled.length >= targetTotal) break;
 
-    // Determine ISO week key
-    const d = new Date(date + 'T00:00:00');
-    const weekKey = `${d.getFullYear()}-W${Math.ceil(
-      (d.getDate() + new Date(d.getFullYear(), d.getMonth(), 1).getDay()) / 7
-    )}`;
+    const weekKey = getWeekKey(date);
 
     if ((weekCount[weekKey] ?? 0) >= habit.timesPerWeek) continue;
 
