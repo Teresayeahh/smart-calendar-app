@@ -16,14 +16,13 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 
-// Replace these values with your actual Firebase project config
 const firebaseConfig = {
-  apiKey: 'YOUR_API_KEY',
-  authDomain: 'YOUR_AUTH_DOMAIN',
-  projectId: 'YOUR_PROJECT_ID',
-  storageBucket: 'YOUR_STORAGE_BUCKET',
-  messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
-  appId: 'YOUR_APP_ID',
+  apiKey: 'AIzaSyBDONBBHeBVDGCQjMrdRwbw1qcYYaJFCOs',
+  authDomain: 'smart-calendar-app-2880e.firebaseapp.com',
+  projectId: 'smart-calendar-app-2880e',
+  storageBucket: 'smart-calendar-app-2880e.firebasestorage.app',
+  messagingSenderId: '106612027438',
+  appId: '1:106612027438:web:bb80f6f21c4910d24b2fbf',
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
