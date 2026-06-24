@@ -120,6 +120,21 @@ export async function getTasks(
   return db.getAllAsync<Task>('SELECT * FROM tasks ORDER BY createdAt DESC');
 }
 
+export async function getParentTasks(
+  db: SQLite.SQLiteDatabase,
+  status?: TaskStatus
+): Promise<Task[]> {
+  if (status) {
+    return db.getAllAsync<Task>(
+      'SELECT * FROM tasks WHERE parentId IS NULL AND status = ? ORDER BY createdAt DESC',
+      status
+    );
+  }
+  return db.getAllAsync<Task>(
+    'SELECT * FROM tasks WHERE parentId IS NULL ORDER BY createdAt DESC'
+  );
+}
+
 export async function getTask(db: SQLite.SQLiteDatabase, id: string): Promise<Task | null> {
   return db.getFirstAsync<Task>('SELECT * FROM tasks WHERE id = ?', id);
 }

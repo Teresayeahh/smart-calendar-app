@@ -11,11 +11,12 @@ import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 
 import {
-  getTasks,
+  getParentTasks,
   getHabits,
   deleteTask,
   deleteHabit,
   deleteTimeBlocksForSource,
+  getChildTasks,
   type Task,
   type Habit,
 } from '../../db/queries';
@@ -24,21 +25,25 @@ import { useAppStore } from '../../lib/store';
 const BLUE = '#208AEF';
 const RED = '#FF3B30';
 const PURPLE = '#AF52DE';
+const GRAY = '#8E8E93';
 
-export default function TasksScreen() {
+export default function ArrangeScreen() {
   const db = useSQLiteContext();
-  const { state, dispatch } = useAppStore();
+  const { dispatch } = useAppStore();
   const [tab, setTab] = useState<'tasks' | 'habits'>('tasks');
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [habits, setHabits] = useState<Habit[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       async function load() {
-        const [tasks, habits] = await Promise.all([
-          getTasks(db, 'active'),
+        const [t, h] = await Promise.all([
+          getParentTasks(db, 'active'),
           getHabits(db, 'active'),
         ]);
-        dispatch({ type: 'SET_TASKS', tasks });
-        dispatch({ type: 'SET_HABITS', habits });
+        setTasks(t);
+        setHabits(h);
+        dispatch({ type: 'SET_HABITS', habits: h });
       }
       load();
     }, [db])
@@ -47,15 +52,21 @@ export default function TasksScreen() {
   async function handleDeleteTask(task: Task) {
     Alert.alert(
       '删除任务',
-      `确定要删除「${task.name}」？所有未完成的时间块也将一并删除。`,
+      `确定要删除「${task.name}」及所有子任务？`,
       [
         { text: '取消', style: 'cancel' },
         {
           text: '删除',
           style: 'destructive',
           onPress: async () => {
+            const children = await getChildTasks(db, task.id);
+            for (const c of children) {
+              await deleteTimeBlocksForSource(db, c.id);
+              await deleteTask(db, c.id);
+            }
             await deleteTimeBlocksForSource(db, task.id);
             await deleteTask(db, task.id);
+            setTasks(prev => prev.filter(t => t.id !== task.id));
             dispatch({ type: 'REMOVE_TASK', id: task.id });
           },
         },
@@ -75,6 +86,7 @@ export default function TasksScreen() {
           onPress: async () => {
             await deleteTimeBlocksForSource(db, habit.id);
             await deleteHabit(db, habit.id);
+            setHabits(prev => prev.filter(h => h.id !== habit.id));
             dispatch({ type: 'REMOVE_HABIT', id: habit.id });
           },
         },
@@ -85,7 +97,7 @@ export default function TasksScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>任务 & 习惯</Text>
+        <Text style={styles.headerTitle}>安排</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={styles.addBtn}
@@ -108,7 +120,7 @@ export default function TasksScreen() {
           onPress={() => setTab('tasks')}
         >
           <Text style={[styles.tabText, tab === 'tasks' && styles.tabTextActive]}>
-            任务 ({state.tasks.length})
+            任务 ({tasks.length})
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -116,29 +128,29 @@ export default function TasksScreen() {
           onPress={() => setTab('habits')}
         >
           <Text style={[styles.tabText, tab === 'habits' && styles.tabTextActive]}>
-            习惯 ({state.habits.length})
+            习惯 ({habits.length})
           </Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scroll}>
         {tab === 'tasks' ? (
-          state.tasks.length === 0 ? (
+          tasks.length === 0 ? (
             <Empty text="暂无任务，点击右上角添加" />
           ) : (
-            state.tasks.map(task => (
+            tasks.map(task => (
               <TaskRow
                 key={task.id}
                 task={task}
-                onEdit={() => router.push(`/task/${task.id}`)}
+                onPress={() => router.push(`/task/${task.id}`)}
                 onDelete={() => handleDeleteTask(task)}
               />
             ))
           )
-        ) : state.habits.length === 0 ? (
+        ) : habits.length === 0 ? (
           <Empty text="暂无习惯，点击右上角添加" />
         ) : (
-          state.habits.map(habit => (
+          habits.map(habit => (
             <HabitRow
               key={habit.id}
               habit={habit}
@@ -155,42 +167,33 @@ export default function TasksScreen() {
 
 function TaskRow({
   task,
-  onEdit,
+  onPress,
   onDelete,
 }: {
   task: Task;
-  onEdit: () => void;
+  onPress: () => void;
   onDelete: () => void;
 }) {
-  const totalBlocks = task.totalDuration && task.blockDuration
-    ? Math.ceil(task.totalDuration / task.blockDuration)
-    : null;
-
   return (
-    <View style={styles.card}>
+    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.75}>
+      <View style={[styles.cardAccent, { backgroundColor: BLUE }]} />
       <View style={styles.cardMain}>
         <Text style={styles.cardName}>{task.name}</Text>
         <View style={styles.meta}>
           {task.deadline && (
             <MetaTag icon="📅" text={`截止 ${task.deadline}`} />
           )}
-          {task.totalDuration && (
-            <MetaTag icon="⏱" text={`${task.totalDuration} 分钟`} />
-          )}
-          {totalBlocks && (
-            <MetaTag icon="🧩" text={`${totalBlocks} 块`} />
-          )}
+          <MetaTag icon="›" text="查看子任务" color={GRAY} />
         </View>
       </View>
-      <View style={styles.cardActions}>
-        <TouchableOpacity style={styles.iconBtn} onPress={onEdit}>
-          <Text style={styles.iconBtnText}>编辑</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.iconBtn, { backgroundColor: RED + '15' }]} onPress={onDelete}>
-          <Text style={[styles.iconBtnText, { color: RED }]}>删除</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+      <TouchableOpacity
+        style={[styles.iconBtn, { backgroundColor: RED + '15' }]}
+        onPress={onDelete}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Text style={[styles.iconBtnText, { color: RED }]}>删除</Text>
+      </TouchableOpacity>
+    </TouchableOpacity>
   );
 }
 
@@ -226,10 +229,10 @@ function HabitRow({
   );
 }
 
-function MetaTag({ icon, text }: { icon: string; text: string }) {
+function MetaTag({ icon, text, color }: { icon: string; text: string; color?: string }) {
   return (
     <View style={styles.metaTag}>
-      <Text style={styles.metaText}>{icon} {text}</Text>
+      <Text style={[styles.metaText, color ? { color } : {}]}>{icon} {text}</Text>
     </View>
   );
 }
@@ -292,7 +295,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   cardAccent: { width: 4, position: 'absolute', left: 0, top: 0, bottom: 0 },
-  cardMain: { flex: 1, paddingLeft: 4 },
+  cardMain: { flex: 1, paddingLeft: 8 },
   cardName: { fontSize: 16, fontWeight: '600', color: '#111', marginBottom: 6 },
   meta: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   metaTag: { backgroundColor: '#F0F0F3', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },

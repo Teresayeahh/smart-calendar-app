@@ -13,6 +13,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 
 import { createHabit } from '../../db/queries';
 import { localDateStr } from '../../lib/dateUtils';
+import { DatePickerInput } from '../../components/DatePickerInput';
 
 const PURPLE = '#AF52DE';
 
@@ -22,22 +23,15 @@ export default function NewHabitScreen() {
   const [name, setName] = useState('');
   const [duration, setDuration] = useState('45');
   const [timesPerWeek, setTimesPerWeek] = useState('3');
-  const [weeks, setWeeks] = useState('4');
-
-  function getCycleEnd(w: number): string {
-    const d = new Date();
-    d.setDate(d.getDate() + w * 7);
-    return localDateStr(d);
-  }
+  const [cycleEnd, setCycleEnd] = useState('');
 
   async function handleCreate() {
     if (!name.trim()) { Alert.alert('请输入习惯名称'); return; }
     const dur = parseInt(duration);
     const freq = parseInt(timesPerWeek);
-    const w = parseInt(weeks);
     if (isNaN(dur) || dur <= 0) { Alert.alert('请输入有效的每次时长'); return; }
     if (isNaN(freq) || freq < 1 || freq > 7) { Alert.alert('频次范围 1–7 次/周'); return; }
-    if (isNaN(w) || w <= 0) { Alert.alert('请输入有效的周期周数'); return; }
+    if (!cycleEnd) { Alert.alert('请选择周期结束日期'); return; }
 
     const today = localDateStr();
     const habit = await createHabit(db, {
@@ -45,7 +39,7 @@ export default function NewHabitScreen() {
       durationPerSession: dur,
       timesPerWeek: freq,
       cycleStart: today,
-      cycleEnd: getCycleEnd(w),
+      cycleEnd,
     });
 
     router.replace({
@@ -54,9 +48,8 @@ export default function NewHabitScreen() {
     });
   }
 
-  const w = parseInt(weeks);
   const freq = parseInt(timesPerWeek);
-  const totalSessions = (!isNaN(w) && !isNaN(freq)) ? w * freq : 0;
+  const totalSessions = !isNaN(freq) && cycleEnd ? '已选结束日期' : '';
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -69,13 +62,12 @@ export default function NewHabitScreen() {
       <Field label="每周频次 *">
         <TextInput style={styles.input} value={timesPerWeek} onChangeText={setTimesPerWeek} placeholder="3" keyboardType="number-pad" />
       </Field>
-      <Field label="持续周数 *">
-        <TextInput style={styles.input} value={weeks} onChangeText={setWeeks} placeholder="4" keyboardType="number-pad" />
-        {totalSessions > 0 && (
-          <Text style={styles.hint}>
-            共 {totalSessions} 次，至 {getCycleEnd(!isNaN(w) ? w : 0)}
-          </Text>
-        )}
+      <Field label="周期结束日期 *">
+        <DatePickerInput
+          value={cycleEnd}
+          onChange={setCycleEnd}
+          minDate={localDateStr()}
+        />
       </Field>
       <TouchableOpacity style={[styles.btn, { backgroundColor: PURPLE }]} onPress={handleCreate}>
         <Text style={styles.btnText}>生成排程预览</Text>
@@ -97,9 +89,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   content: { padding: 20, paddingBottom: 40 },
   field: { marginBottom: 20 },
-  label: { fontSize: 14, color: '#333', fontWeight: '500', marginBottom: 6 },
+  label: { fontSize: 14, color: '#333', fontWeight: '500', marginBottom: 8 },
   input: { borderWidth: 1, borderColor: '#DDD', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#111', backgroundColor: '#FAFAFA' },
-  hint: { marginTop: 4, fontSize: 12, color: '#888' },
   btn: { borderRadius: 12, paddingVertical: 15, alignItems: 'center', marginTop: 8 },
   btnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });

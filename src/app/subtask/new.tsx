@@ -8,7 +8,7 @@ import {
   StyleSheet,
   Alert,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 
 import { createTask } from '../../db/queries';
@@ -17,36 +17,61 @@ import { localDateStr } from '../../lib/dateUtils';
 
 const BLUE = '#208AEF';
 
-export default function NewTaskScreen() {
+export default function NewSubtaskScreen() {
+  const { parentId } = useLocalSearchParams<{ parentId: string }>();
   const db = useSQLiteContext();
+
   const [name, setName] = useState('');
+  const [totalDuration, setTotalDuration] = useState('');
   const [deadline, setDeadline] = useState('');
 
   async function handleCreate() {
-    if (!name.trim()) { Alert.alert('请输入任务名称'); return; }
+    if (!name.trim()) { Alert.alert('请输入子任务名称'); return; }
+    const total = parseInt(totalDuration);
+    if (isNaN(total) || total <= 0) { Alert.alert('请输入有效的总耗时（分钟）'); return; }
     if (!deadline) { Alert.alert('请选择截止日期'); return; }
 
-    const task = await createTask(db, {
-      parentId: null,
+    // blockDuration: sessions of max 60 min
+    const blockDur = Math.min(total, 60);
+
+    const sub = await createTask(db, {
+      parentId,
       name: name.trim(),
-      totalDuration: null,
-      blockDuration: null,
+      totalDuration: total,
+      blockDuration: blockDur,
       deadline,
     });
 
-    router.replace({ pathname: '/task/[id]', params: { id: task.id } });
+    router.replace({ pathname: '/schedule-preview', params: { taskId: sub.id } });
   }
+
+  const dur = parseInt(totalDuration);
+  const blocks = !isNaN(dur) && dur > 0 ? Math.ceil(dur / Math.min(dur, 60)) : null;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Field label="任务名称 *">
+      <Field label="子任务名称 *">
         <TextInput
           style={styles.input}
           value={name}
           onChangeText={setName}
-          placeholder="例如：准备演讲稿"
+          placeholder="例如：撰写第一章"
           autoFocus
         />
+      </Field>
+      <Field label="总耗时（分钟）*">
+        <TextInput
+          style={styles.input}
+          value={totalDuration}
+          onChangeText={setTotalDuration}
+          keyboardType="number-pad"
+          placeholder="例如：120"
+        />
+        {blocks !== null && (
+          <Text style={styles.hint}>
+            将拆分为 {blocks} 个时间块（每块最长 60 分钟）
+          </Text>
+        )}
       </Field>
       <Field label="截止日期 *">
         <DatePickerInput
@@ -56,7 +81,7 @@ export default function NewTaskScreen() {
         />
       </Field>
       <TouchableOpacity style={styles.btn} onPress={handleCreate}>
-        <Text style={styles.btnText}>创建任务</Text>
+        <Text style={styles.btnText}>生成排程预览</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -86,6 +111,7 @@ const styles = StyleSheet.create({
     color: '#111',
     backgroundColor: '#FAFAFA',
   },
+  hint: { marginTop: 4, fontSize: 12, color: '#888' },
   btn: {
     backgroundColor: BLUE,
     borderRadius: 12,

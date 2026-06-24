@@ -24,15 +24,13 @@ import {
 } from '../../db/queries';
 import { useAppStore } from '../../lib/store';
 import { getDayType } from '../../lib/holidays';
+import { DatePickerInput } from '../../components/DatePickerInput';
+import { localDateStr } from '../../lib/dateUtils';
 
 const BLUE = '#208AEF';
 const RED = '#FF3B30';
 const GREEN = '#34C759';
 const ORANGE = '#FF9500';
-
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 export default function SettingsScreen() {
   const db = useSQLiteContext();
@@ -59,7 +57,7 @@ export default function SettingsScreen() {
   );
 
   function startNewPhase() {
-    const today = todayStr();
+    const today = localDateStr();
     setEditPhase({
       name: '',
       startDate: today,
@@ -113,8 +111,8 @@ export default function SettingsScreen() {
   }
 
   async function addOverride() {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(overrideDate)) {
-      Alert.alert('日期格式错误', '请使用 YYYY-MM-DD 格式');
+    if (!overrideDate) {
+      Alert.alert('请选择日期');
       return;
     }
     await setDayOverride(db, overrideDate, overrideType);
@@ -165,11 +163,11 @@ export default function SettingsScreen() {
           调休上班日 / 临时休假日可在此覆盖系统判断
         </Text>
         <View style={styles.row}>
-          <TextInput
-            style={[styles.input, { flex: 1 }]}
+          <DatePickerInput
             value={overrideDate}
-            onChangeText={setOverrideDate}
-            placeholder="YYYY-MM-DD"
+            onChange={setOverrideDate}
+            placeholder="选择日期"
+            style={{ flex: 1 }}
           />
           <TouchableOpacity
             style={[styles.toggleBtn, overrideType === 'holiday' && styles.toggleActive]}
@@ -271,11 +269,19 @@ function PhaseForm({
       <FField label="阶段名称">
         <TextInput style={styles.input} value={phase.name ?? ''} onChangeText={v => set('name', v)} placeholder="实习期" />
       </FField>
-      <FField label="开始日期 (YYYY-MM-DD)">
-        <TextInput style={styles.input} value={phase.startDate ?? ''} onChangeText={v => set('startDate', v)} placeholder="2025-01-01" />
+      <FField label="开始日期">
+        <DatePickerInput
+          value={phase.startDate ?? ''}
+          onChange={v => set('startDate', v)}
+        />
       </FField>
       <FField label="结束日期（选填）">
-        <TextInput style={styles.input} value={phase.endDate ?? ''} onChangeText={v => set('endDate', v || null)} placeholder="2025-09-01" />
+        <DatePickerInput
+          value={phase.endDate ?? ''}
+          onChange={v => set('endDate', v || null)}
+          placeholder="不设置结束日期"
+          optional
+        />
       </FField>
       <Text style={styles.sectionLabel}>工作日可用时间</Text>
       <View style={styles.row}>

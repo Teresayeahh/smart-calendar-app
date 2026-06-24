@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 
 import { getTimeBlocksInRange, getTask, getHabit, type TimeBlock } from '../../db/queries';
@@ -91,11 +91,7 @@ export default function WeekScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backText}>‹ 今日</Text>
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>周视图</Text>
-        <View style={{ width: 60 }} />
       </View>
 
       {/* Week navigator */}
@@ -182,19 +178,14 @@ export default function WeekScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F7' },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 52,
+    paddingTop: 56,
     paddingBottom: 12,
     paddingHorizontal: 16,
     backgroundColor: '#fff',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#DDD',
   },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: '#111' },
-  backBtn: { width: 60 },
-  backText: { fontSize: 16, color: BLUE },
+  headerTitle: { fontSize: 22, fontWeight: '700', color: '#111' },
   weekNav: {
     flexDirection: 'row',
     alignItems: 'center',

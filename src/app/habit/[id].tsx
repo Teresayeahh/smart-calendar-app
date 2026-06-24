@@ -17,6 +17,8 @@ import {
   deleteTimeBlocksForSource,
   type Habit,
 } from '../../db/queries';
+import { DatePickerInput } from '../../components/DatePickerInput';
+import { localDateStr } from '../../lib/dateUtils';
 
 const PURPLE = '#AF52DE';
 
@@ -47,7 +49,7 @@ export default function EditHabitScreen() {
     const freq = parseInt(timesPerWeek);
     if (isNaN(dur) || dur <= 0) { Alert.alert('请输入有效时长'); return; }
     if (isNaN(freq) || freq < 1 || freq > 7) { Alert.alert('频次 1–7 次/周'); return; }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(cycleEnd)) { Alert.alert('结束日期格式错误，请用 YYYY-MM-DD'); return; }
+    if (!cycleEnd) { Alert.alert('请选择周期结束日期'); return; }
 
     await updateHabit(db, id, { name: name.trim(), durationPerSession: dur, timesPerWeek: freq, cycleEnd });
     await deleteTimeBlocksForSource(db, id);
@@ -70,8 +72,12 @@ export default function EditHabitScreen() {
       <Field label="每周频次 *">
         <TextInput style={styles.input} value={timesPerWeek} onChangeText={setTimesPerWeek} keyboardType="number-pad" />
       </Field>
-      <Field label="周期结束日期（YYYY-MM-DD）">
-        <TextInput style={styles.input} value={cycleEnd} onChangeText={setCycleEnd} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" />
+      <Field label="周期结束日期 *">
+        <DatePickerInput
+          value={cycleEnd}
+          onChange={setCycleEnd}
+          minDate={localDateStr()}
+        />
       </Field>
       <TouchableOpacity style={[styles.btn, { backgroundColor: PURPLE }]} onPress={handleSave}>
         <Text style={styles.btnText}>保存并重新排程</Text>
@@ -93,7 +99,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   content: { padding: 20, paddingBottom: 40 },
   field: { marginBottom: 20 },
-  label: { fontSize: 14, color: '#333', fontWeight: '500', marginBottom: 6 },
+  label: { fontSize: 14, color: '#333', fontWeight: '500', marginBottom: 8 },
   input: { borderWidth: 1, borderColor: '#DDD', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#111', backgroundColor: '#FAFAFA' },
   btn: { borderRadius: 12, paddingVertical: 15, alignItems: 'center', marginTop: 8 },
   btnText: { color: '#fff', fontSize: 16, fontWeight: '600' },

@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Text } from 'react-native';
 import { Tabs, router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { Text } from 'react-native';
 
 import {
   getPhases,
@@ -16,7 +15,6 @@ import { requestNotificationPermissions } from '../../lib/notifications';
 import { localDateStr } from '../../lib/dateUtils';
 
 const BLUE = '#208AEF';
-const PURPLE = '#AF52DE';
 
 export default function TabsLayout() {
   const db = useSQLiteContext();
@@ -29,7 +27,6 @@ export default function TabsLayout() {
         const phases = await getPhases(db);
 
         if (phases.length === 0) {
-          // First launch — go to onboarding
           router.replace('/onboarding');
           return;
         }
@@ -58,7 +55,7 @@ export default function TabsLayout() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#208AEF' }}>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: BLUE }}>
         <ActivityIndicator size="large" color="#fff" />
       </View>
     );
@@ -78,15 +75,23 @@ export default function TabsLayout() {
         options={{
           title: '今日',
           tabBarLabel: '今日',
-          tabBarIcon: () => <Text style={{ fontSize: 20 }}>📅</Text>,
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>☀️</Text>,
         }}
       />
       <Tabs.Screen
         name="tasks"
         options={{
-          title: '任务',
-          tabBarLabel: '任务',
+          title: '安排',
+          tabBarLabel: '安排',
           tabBarIcon: () => <Text style={{ fontSize: 20 }}>✅</Text>,
+        }}
+      />
+      <Tabs.Screen
+        name="week"
+        options={{
+          title: '周视图',
+          tabBarLabel: '周视图',
+          tabBarIcon: () => <Text style={{ fontSize: 20 }}>📅</Text>,
         }}
       />
       <Tabs.Screen
@@ -96,10 +101,6 @@ export default function TabsLayout() {
           tabBarLabel: '设置',
           tabBarIcon: () => <Text style={{ fontSize: 20 }}>⚙️</Text>,
         }}
-      />
-      <Tabs.Screen
-        name="week"
-        options={{ href: null }}
       />
     </Tabs>
   );

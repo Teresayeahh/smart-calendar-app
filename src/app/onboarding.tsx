@@ -14,6 +14,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { upsertPhase, getPhases } from '../db/queries';
 import { requestNotificationPermissions } from '../lib/notifications';
 import { useAppStore } from '../lib/store';
+import { DatePickerInput } from '../components/DatePickerInput';
 
 const BLUE = '#208AEF';
 
@@ -86,12 +87,12 @@ export default function OnboardingScreen() {
             placeholder="实习期"
           />
         </Field>
-        <Field label="结束日期（选填，格式 YYYY-MM-DD）">
-          <TextInput
-            style={styles.input}
+        <Field label="结束日期（选填）">
+          <DatePickerInput
             value={phaseEnd}
-            onChangeText={setPhaseEnd}
-            placeholder="2025-09-01"
+            onChange={setPhaseEnd}
+            placeholder="不设置结束日期"
+            optional
           />
         </Field>
       </Section>
